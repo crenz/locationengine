@@ -6,6 +6,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"encoding/json"
 	"regexp"
+	"crypto/tls"
 )
 
 const topicPrefix = "/presence/stream/"
@@ -92,6 +93,14 @@ func (l * locationEngine) Connect(apiKey string) (bool, error) {
 	opts.AddBroker(l.broker)
 	opts.SetUsername(l.user)
 	opts.SetPassword(l.apiKey)
+
+	tlsCfg := &tls.Config {
+		InsecureSkipVerify: true,
+	}
+	opts.SetTLSConfig(tlsCfg)
+	log.WithFields(log.Fields{
+		"component": "LocationEngine",
+	}).Warn("WARNING - Not checking TLS certificate of broker!")
 
 	pahoOnConnectHandler := func(cm mqtt.Client) {
 		log.WithFields(log.Fields{
