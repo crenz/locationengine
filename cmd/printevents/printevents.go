@@ -27,23 +27,15 @@ func main() {
 	l.RegisterCallback(locationengine.EvtItemProximityChange, callback)
 	l.RegisterCallback(locationengine.EvtItemRSSIChange, callback)
 
-	connected, _ := l.Connect(API_KEY)
-
-	if (connected != l.IsConnected()) {
-		log.Errorln("Return value does not equal connection state")
+	if connected, _ := l.Connect(API_KEY); !connected {
+		log.Fatalln("Failed to connect!")
 	}
+	log.Infoln("Connected successfully")
 
-	if (!l.IsConnected()) {
-		log.Errorln("Failed to connect!")
+	if err := l.Subscribe([]string{PLACE}); err != nil {
+		log.Fatalln("Failed to subscribe!")
 	}
-
-	log.Print("Connected successfully")
-
-	err := l.Subscribe([]string{PLACE})
-	if err != nil {
-		log.Errorln("Failed to subscribe!")
-	}
-	log.Print("Subscribed successfully")
+	log.Infoln("Subscribed successfully")
 
 	defer l.Disconnect()
 
