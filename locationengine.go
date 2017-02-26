@@ -20,16 +20,17 @@ const (
 	EvtItemProximityChange
 )
 
-type Callback func(evt Event, receiver string, item Item)
+type EventCallback func(evt Event, receiver string, item Item)
+type TelemetryCallback func(receiver string, item []Item)
 
 type Item struct {
-	Timestamp uint
-	SourceId string
-	TrackingId string
-	Rssi int
-	Proximity string
-	Scantype string
-	DeviceAddress string
+	Timestamp uint `json:"timestamp"`
+	SourceId string `json:"sourceId"`
+	TrackingId string `json:"trackingId"`
+	Rssi int `json:"rssi"`
+	Proximity string `json:"proximity"`
+	Scantype string `json:"scanType"`
+	DeviceAddress string `json:"deviceAddress"`
 }
 
 type LocationEngine interface {
@@ -39,7 +40,8 @@ type LocationEngine interface {
 	Disconnect()
 	Subscribe(id[] string) error
 	ReceiveMessage()
-	RegisterCallback(evt Event, callback Callback)
+	RegisterEventCallback(evt Event, callback EventCallback)
+	RegisterTelemetryCallback(callback TelemetryCallback)
 }
 
 type locationEngine struct {
@@ -59,7 +61,8 @@ type locationEngine struct {
 	knownItems map[string]map[string]Item
 
 	topicRegex * regexp.Regexp
-	callbacks map[Event]Callback
+	eventCallbacks map[Event]EventCallback
+	telemetryCallback TelemetryCallback
 }
 
 
@@ -77,7 +80,7 @@ func New() LocationEngine {
 	l.knownItems = make(map[string]map[string]Item)
 
 	l.topicRegex = regexp.MustCompile(`^/presence/stream/(.+)$`)
-	l.callbacks = make(map[Event]Callback)
+	l.eventCallbacks = make(map[Event]EventCallback)
 
 	return l
 }
@@ -183,10 +186,16 @@ func logItem(i Item, msg string) {
 	}).Debug(msg)
 }
 
-func (l * locationEngine) invokeCallback(evt Event, receiver string, item Item) {
-	c, exists := l.callbacks[evt]
+func (l * locationEngine) invokeEventCallback(evt Event, receiver string, item Item) {
+	c, exists := l.eventCallbacks[evt]
 	if exists {
-		c(evt, receiver, item)
+		go c(evt, receiver, item)
+	}
+}
+
+func (l * locationEngine) invokeTelemetryCallback(receiver string, item[] Item) {
+	if l.telemetryCallback != nil {
+		go l.telemetryCallback(receiver, item)
 	}
 }
 
@@ -212,12 +221,13 @@ func (l * locationEngine) ReceiveMessage() {
 		}).Error("Error parsing payload")
 	}
 
-
 	log.WithFields(log.Fields{
 		"component": "LocationEngine",
 		"receiver": receiver,
 		"deviceList": itemsSeen,
 	}).Debug("Incoming device list")
+
+	l.invokeTelemetryCallback(receiver, itemsSeen)
 
 	knownItems, exists := l.knownItems[receiver]
 	if (!exists) {
@@ -232,19 +242,19 @@ func (l * locationEngine) ReceiveMessage() {
 		if (!exists) {
 			logItem(i, "New device in range")
 			l.knownItems[receiver][i.DeviceAddress] = i
-			l.invokeCallback(EvtItemAppeared, receiver, i)
+			l.invokeEventCallback(EvtItemAppeared, receiver, i)
 		} else {
 			if i.Proximity != prevValue.Proximity {
 				logItem(i, "Proximity change")
 				prevValue.Proximity = i.Proximity
 				l.knownItems[receiver][i.DeviceAddress] = prevValue
-				l.invokeCallback(EvtItemProximityChange, receiver, i)
+				l.invokeEventCallback(EvtItemProximityChange, receiver, i)
 			}
 			if i.Rssi != prevValue.Rssi {
 				logItem(i, "RSSI change")
 				prevValue.Rssi = i.Rssi
 				l.knownItems[receiver][i.DeviceAddress] = prevValue
-				l.invokeCallback(EvtItemRSSIChange, receiver, i)
+				l.invokeEventCallback(EvtItemRSSIChange, receiver, i)
 			}
 		}
 	}
@@ -254,11 +264,15 @@ func (l * locationEngine) ReceiveMessage() {
 		if !exists {
 			logItem(i, "Device out of range")
 			delete(l.knownItems[receiver], i.DeviceAddress)
-			l.invokeCallback(EvtItemDisappeared, receiver, i)
+			l.invokeEventCallback(EvtItemDisappeared, receiver, i)
 		}
 	}
 }
 
-func (l * locationEngine) RegisterCallback(evt Event, callback Callback) {
-	l.callbacks[evt] = callback
+func (l * locationEngine) RegisterEventCallback(evt Event, callback EventCallback) {
+	l.eventCallbacks[evt] = callback
+}
+
+func (l * locationEngine) RegisterTelemetryCallback(callback TelemetryCallback) {
+	l.telemetryCallback = callback
 }

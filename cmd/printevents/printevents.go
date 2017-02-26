@@ -9,8 +9,12 @@ import (
 const API_KEY = "your_api_key"
 const PLACE = "your_place_uuid"
 
-func callback(evt locationengine.Event, receiver string, item locationengine.Item) {
-	log.Infof("Callback [%i] %s %+v\n", evt, receiver, item)
+func telemetryCallback(receiver string, item[] locationengine.Item) {
+	log.Infof("[Telemetry] %s: %+v\n", receiver, item)
+}
+
+func eventCallback(evt locationengine.Event, receiver string, item locationengine.Item) {
+	log.Infof("[Event %i] %s: %+v\n", evt, receiver, item)
 }
 
 func init() {
@@ -22,10 +26,10 @@ func init() {
 func main() {
 	log.Infoln("Connecting to Kontakt.io broker")
 	l := locationengine.New()
-	l.RegisterCallback(locationengine.EvtItemAppeared, callback)
-	l.RegisterCallback(locationengine.EvtItemDisappeared, callback)
-	l.RegisterCallback(locationengine.EvtItemProximityChange, callback)
-	l.RegisterCallback(locationengine.EvtItemRSSIChange, callback)
+	l.RegisterEventCallback(locationengine.EvtItemAppeared, eventCallback)
+	l.RegisterEventCallback(locationengine.EvtItemDisappeared, eventCallback)
+	l.RegisterEventCallback(locationengine.EvtItemProximityChange, eventCallback)
+	l.RegisterEventCallback(locationengine.EvtItemRSSIChange, eventCallback)
 
 	if connected, _ := l.Connect(API_KEY); !connected {
 		log.Fatalln("Failed to connect!")
